@@ -1,0 +1,6 @@
+{
+  "name": "Pixel Spire",
+  "description": "A 16x16 pixel-art vertical wall-hopping climber with grappling, double jumps, backflips, and deadly shaft hazards.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
