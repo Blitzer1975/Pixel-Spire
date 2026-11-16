@@ -1,4 +1,4 @@
-import { PlayerPose, SkinId, TILE } from './types';
+import { BiomeThemeId, PlayerPose, SkinId, THEMES, TILE } from './types';
 
 export type SpriteName =
   | 'wall_brick'
@@ -41,6 +41,22 @@ export type SpriteName =
   | 'sign_right'
   | 'sign_left'
   | 'sign_up'
+  | 'crusher_idle'
+  | 'crusher_warn'
+  | 'flame_vent_right'
+  | 'flame_vent_down'
+  | 'flame_vent_left'
+  | 'flame_vent_up'
+  | 'flame_jet_0'
+  | 'flame_jet_1'
+  | 'coil_idle'
+  | 'coil_warn'
+  | 'coil_fire'
+  | 'acid_vent_idle'
+  | 'acid_vent_drip'
+  | 'acid_drop'
+  | 'pendulum_pivot'
+  | 'pendulum_mace'
   | 'grapple_ring'
   | 'grapple_ring_active'
   | 'gem_0'
@@ -610,6 +626,258 @@ const MOVING_PLAT = [
   '................',
 ];
 
+// Spike Crusher 16x16 block (armored iron chassis with spiked underside teeth)
+const CRUSHER_IDLE = [
+  'kkkkkkkkkkkkkkkk',
+  'khhmmmmmmmmmmhhk',
+  'khmssddddddssmmk',
+  'kmsddddddddddsmk',
+  'kmsdkllssllkdsmk',
+  'kmsdklrrrrlkdsmk',
+  'kmsdklrWWrlkdsmk',
+  'kmsdkllssllkdsmk',
+  'kmsddddddddddsmk',
+  'kmmssssssssssmmk',
+  'kkkkkkkkkkkkkkkk',
+  '.kprk.kprk.kprk.',
+  '.kwmk.kwmk.kwmk.',
+  '..kmk..kmk..kmk.',
+  '...k....k....k..',
+  '................',
+];
+
+const CRUSHER_WARN = [
+  'kkkkkkkkkkkkkkkk',
+  'kAAFFFFFFFFFFAAk',
+  'kAFssddddddssFAk',
+  'kFsddddddddddsfk',
+  'kFsdkFFWWFFkdsfk',
+  'kFsdkFWWWWFkdsfk',
+  'kFsdkFWWWWFkdsfk',
+  'kFsdkFFWWFFkdsfk',
+  'kFsddddddddddsfk',
+  'kFFrrrrrrrrrrFFk',
+  'kkkkkkkkkkkkkkkk',
+  '.kprk.kprk.kprk.',
+  '.kwmk.kwmk.kwmk.',
+  '..krk..krk..krk.',
+  '...k....k....k..',
+  '................',
+];
+
+// Flame Vent (pointing right, rotated for down/left/up) & Flame Jet Plumes
+const FLAME_VENT_RIGHT = [
+  'kkkkkkkkkkkkkkkk',
+  'khhllllllllllhhk',
+  'klssssssssssslfk',
+  'ksddddddddddkffk',
+  'ksddkkkkkkkkkFfk',
+  'ksdkrrrrffffkWFk',
+  'ksdkrFFWWWWFkWWk',
+  'ksdkrFWWWWWFkWWk',
+  'ksdkrFWWWWWFkWWk',
+  'ksdkrFFWWWWFkWFk',
+  'ksdkrrrrffffkffk',
+  'ksddkkkkkkkkkffk',
+  'ksddddddddddslfk',
+  'kllllllllllllhhk',
+  'kddddddddddddddk',
+  'kkkkkkkkkkkkkkkk',
+];
+
+const FLAME_JET_0 = [
+  '................',
+  '...rr......rr...',
+  '..rffrrrrrffr...',
+  '.rffFFFFFFFFfr..',
+  'rfFFWWWWWWWWFFr.',
+  'rfFWWWWWWWWWWFfr',
+  'rFFWWWWWWWWWWFFr',
+  'rFFWWWWWWWWWWFFr',
+  'rfFWWWWWWWWWWFfr',
+  'rfFFWWWWWWWWFFr.',
+  '.rffFFFFFFFFfr..',
+  '..rffrrrrrffr...',
+  '...rr......rr...',
+  '................',
+  '................',
+  '................',
+];
+
+const FLAME_JET_1 = [
+  '..r........r....',
+  '.rffr....rffr...',
+  '.rfFFrrrrFFffr..',
+  'rfFFWWWWWWFFFfr.',
+  'rFFWWWWWWWWWWFfr',
+  'rFWWWWWWWWWWWWFr',
+  'rFWWWWWWWWWWWWFr',
+  'rFFWWWWWWWWWWFfr',
+  'rfFFWWWWWWFFFfr.',
+  '.rfFFrrrrFFffr..',
+  '.rffr....rffr...',
+  '..r........r....',
+  '................',
+  '................',
+  '................',
+  '................',
+];
+
+// Shock Coil Pylons (Tesla towers discharging arcs)
+const COIL_IDLE = [
+  '....kkkkkkkk....',
+  '...kCCCCCCCCk...',
+  '...kCGGGGGGCk...',
+  '....kkGGGGkk....',
+  '..kkkkkkkkkkkk..',
+  '.kmmmmmmmmmmmmk.',
+  '..kksssssssskk..',
+  '...kllGGGGllk...',
+  '..kksssssssskk..',
+  '...kllGGGGllk...',
+  '..kksssssssskk..',
+  '...kssddddssk...',
+  '..kssddddddssk..',
+  '.kllssssssssllk.',
+  'khhhhhhhhhhhhhhk',
+  'kkkkkkkkkkkkkkkk',
+];
+
+const COIL_WARN = [
+  '....kkkkkkkk....',
+  '...kAAFFFFAAk...',
+  '...kAFWWWWFAk...',
+  '....kkFFFFkk....',
+  '..kkkkkkkkkkkk..',
+  '.kmmmmmmmmmmmmk.',
+  '..kksssssssskk..',
+  '...kllFFFFllk...',
+  '..kksssssssskk..',
+  '...kllFFFFllk...',
+  '..kksssssssskk..',
+  '...kssddddssk...',
+  '..kssddddddssk..',
+  '.kllssssssssllk.',
+  'khhhhhhhhhhhhhhk',
+  'kkkkkkkkkkkkkkkk',
+];
+
+const COIL_FIRE = [
+  '....kkkkkkkk....',
+  '...kWWWWWWWWk...',
+  '...kWCGGGGCWk...',
+  '....kkCCCCkk....',
+  '..kkkkkkkkkkkk..',
+  '.kCCCCCCCCCCCCk.',
+  '..kksssssssskk..',
+  '...kllWWWWllk...',
+  '..kksssssssskk..',
+  '...kllCCCCllk...',
+  '..kksssssssskk..',
+  '...kssGGGGssk...',
+  '..kssddddddssk..',
+  '.kllssssssssllk.',
+  'khhhhhhhhhhhhhhk',
+  'kkkkkkkkkkkkkkkk',
+];
+
+// Acid Drip Ceiling Vent & Falling Acid Globules
+const ACID_VENT_IDLE = [
+  'kkkkkkkkkkkkkkkk',
+  'khhhhllhhllhhhhk',
+  'kllssssssssssllk',
+  'kssddddddddddssk',
+  'kssddkkkkkkddssk',
+  'ksddkeeeeeekddsk',
+  'ksddkeEEEEekddsk',
+  'ksddkeeeeeekddsk',
+  'kssddkkkkkkddssk',
+  '.kssddddddddssk.',
+  '..kssddddddssk..',
+  '..kdkeeeeeekdk..',
+  '...kkEEEEEEkk...',
+  '.....keeeek.....',
+  '......kkkk......',
+  '................',
+];
+
+const ACID_VENT_DRIP = [
+  'kkkkkkkkkkkkkkkk',
+  'khhhhllhhllhhhhk',
+  'kllssssssssssllk',
+  'kssddddddddddssk',
+  'kssddkkkkkkddssk',
+  'ksddkEEEEEEkddsk',
+  'ksddkeWWWWekddsk',
+  'ksddkEEEEEEkddsk',
+  'kssddkkkkkkddssk',
+  '.kssddddddddssk.',
+  '..kssddddddssk..',
+  '..kdkEEEEEEkdk..',
+  '...kkEWWWWekk...',
+  '.....kEWWEk.....',
+  '......kEEk......',
+  '.......kk.......',
+];
+
+const ACID_DROP = [
+  '................',
+  '.......kk.......',
+  '......kEEk......',
+  '......kEEk......',
+  '.....kEWWek.....',
+  '.....kEWWek.....',
+  '....kEEWWEEk....',
+  '....kEEWWEEk....',
+  '....keeeeeek....',
+  '....keeeeeek....',
+  '.....keeeek.....',
+  '......kEEk......',
+  '.......kk.......',
+  '................',
+  '................',
+  '................',
+];
+
+// Pendulum Mace Pivot & Spiked Iron Ball
+const PENDULUM_PIVOT = [
+  '....kkkkkkkk....',
+  '..kkhhhhhhhhkk..',
+  '.khhllllllllhhk.',
+  '.khlsssssssslhk.',
+  'khlsskkkkkksslhk',
+  'khlsdkddddkdslhk',
+  'khlskdFFFFdkslhk',
+  'khlskdFWWFdkslhk',
+  'khlskdFWWFdkslhk',
+  'khlskdFFFFdkslhk',
+  'khlsdkddddkdslhk',
+  'khlsskkkkkksslhk',
+  '.khlsssssssslhk.',
+  '.khhllllllllhhk.',
+  '..kkddddddddkk..',
+  '....kkkkkkkk....',
+];
+
+const PENDULUM_MACE = [
+  '.......kk.......',
+  '......kmmk......',
+  '..kk..kssk..kk..',
+  '.kmwksssssskwmk.',
+  '..kssllllllssk..',
+  '..ksllmmmmllsk..',
+  'kkslmddrrddmlskk',
+  'mwslmdrFFrdmlswm',
+  'mwslmdrFFrdmlswm',
+  'kkslmddrrddmlskk',
+  '..ksllmmmmllsk..',
+  '..kssllllllssk..',
+  '.kmwksssssskwmk.',
+  '..kk..kssk..kk..',
+  '......kmmk......',
+  '.......kk.......',
+];
+
 const SIGN_RIGHT = [
   '................',
   '..kkkkkkkkkkkk..',
@@ -943,6 +1211,150 @@ const DEMON_HEAD_IDLE = [
   '...kkRRRRRRkk...',
 ];
 
+// Skin 11: Paladin (gilded solar crest, gleaming white-steel helm, azure cloak)
+const PALADIN_HEAD_IDLE = [
+  '.....kkAAkk.....',
+  '....kAAWWAAk....',
+  '...kkmmmmmmkk...',
+  '..kmwwwwwwwwmk..',
+  '..kmwvvvvvvwmk..',
+  '..kmwvGGGGvwmk..',
+  '..kmwwwwwwwwmk..',
+  '...kkAAmmAAkk...',
+];
+
+// Skin 12: Cyber-Samurai (gold-horned kabuto, dark carbon helm, neon cyan visor)
+const SAMURAI_HEAD_IDLE = [
+  '.kk..........kk.',
+  'kAAk.kkkkkk.kAAk',
+  '.kAFkddddddkFAk.',
+  '..kddddddddddk..',
+  '..kdGGGGGGGGdk..',
+  '..kdGCCCCCCGDk..',
+  '..kdrrddddrrdk..',
+  '...kkddddddkk...',
+];
+
+// Skin 13: Ascendant (Secret Skin — star-crowned void hood with cosmic starlight eyes)
+const ASCENDANT_HEAD_IDLE = [
+  '......kAAk......',
+  '....kkWWWWkk....',
+  '...kPPVVVVPPk...',
+  '..kPVvvvvvvVPk..',
+  '..kPvWWvvWWvPk..',
+  '..kPvFFvvFFvPk..',
+  '..kPVvvvvvvVPk..',
+  '...kkPPVVPPkk...',
+];
+
+// Skin 14: Plague Doctor (brimmed hat, emerald optics, pale beak)
+const PLAGUE_HEAD_IDLE = [
+  '....kkkkkkkk....',
+  '..kkddddddddkk..',
+  'kddddddddddddddk',
+  'kkkkkkkkkkkkkkkk',
+  '..kvvvvEEEEvvvk.',
+  '..kvvvvEWWEvvvk.',
+  '..kvvvvvwwwwwkkk',
+  '...kkvvvwwwwkkk.',
+];
+
+// Skin 15: Mecha-Phoenix (fiery solar crest, gold armor, cyan visor)
+const PHOENIX_HEAD_IDLE = [
+  '.....kkrrkk.....',
+  '...kkffFFffkk...',
+  '..kffFWWWWFffk..',
+  '..kFFaaaaaaFFk..',
+  '..kaavvvvvvaak..',
+  '..kavCCCCCCvak..',
+  '..kaavvvvvvaak..',
+  '...kkAAAAAAkk...',
+];
+
+// Skin 16: Void Stalker (horned shadow hood, twin magenta eyes)
+const STALKER_HEAD_IDLE = [
+  '..kk........kk..',
+  '.kPPk.kkkk.kPPk.',
+  '..kPPVVVVVVPPk..',
+  '..kPVvvvvvvVPk..',
+  '..kPvTTvvTTvPk..',
+  '..kPvWWvvWWvPk..',
+  '..kPVvvvvvvVPk..',
+  '...kkPPVVPPkk...',
+];
+
+// Skin 17: Chrono-King (Secret Skin — gilded clockwork crown, cyan temporal visor)
+const CHRONO_HEAD_IDLE = [
+  '..kk..kAAk..kk..',
+  '.kAAkkAWWAkkAAk.',
+  '..kAAAAAAAAAAk..',
+  '..kAAvvvvvvAAk..',
+  '..kAvCCCCCCvAk..',
+  '..kAvCWWWWCvAk..',
+  '..kAAvvvvvvAAk..',
+  '...kkAAAAAAkk...',
+];
+
+// Skin 18: Werewolf (wolf ears, silver-gray fur, glowing ember eyes, fangs)
+const WEREWOLF_HEAD_IDLE = [
+  '..kk........kk..',
+  '.khhk.kkkk.khhk.',
+  '.khmkkkkkkkkmhk.',
+  '..kmmmmmmmmmmk..',
+  '..kmrrrmmrrrmk..',
+  '..kmmmkkkkmmmk..',
+  '..kmWmkWWkmWmk..',
+  '...kkmmmmmmkk...',
+];
+
+// Skin 19: Trailrunner (aerodynamic emerald-gold champion helm & lightning visor)
+const TRAILRUNNER_HEAD_IDLE = [
+  '....kkkkkkkk....',
+  '...kEEEEEEEEk...',
+  '..kEEWWWWWWEEk..',
+  '..kEkkkkkkkkEk..',
+  '..kEkAAWWAAkEk..',
+  '..kEkAAAAAAkEk..',
+  '...kkeEEEEekk...',
+  '....kkkkkkkk....',
+];
+
+// Skin 20: Skeleton (ivory skull, deep hollow sockets with cyan soul pinpoints, jaw)
+const SKELETON_HEAD_IDLE = [
+  '....kkkkkkkk....',
+  '...kwwwwwwwwk...',
+  '..kwwwwwwwwwwk..',
+  '..kwwvvwwvvwwk..',
+  '..kwwvGwwGvwwk..',
+  '...kwwwvvwwwk...',
+  '...kkwkwkwkpk...',
+  '....kkkkkkkk....',
+];
+
+// Skin 21: Banshee (flowing spectral silver-cyan locks, hollow glowing spirit eyes)
+const BANSHEE_HEAD_IDLE = [
+  '...kkkkkkkkkk...',
+  '..kCCCCCCCCCCk..',
+  '.kCCGGGGGGGGCCk.',
+  '.kCGvvGGGGvvGCk.',
+  '.kCGWWGGGGWWGCk.',
+  '.kCGGvvGGvvGGC.',
+  '.kCCGGGGGGGGCCk.',
+  '..kCkkkkkkkkCk..',
+];
+
+// Skin 22: Possessed Armor (horned cursed iron greathelm with blazing soul-fire visor)
+const POSSESSED_ARMOR_HEAD_IDLE = [
+  '..kk........kk..',
+  '.krrk.kkkk.krrk.',
+  '..ksmmmmmmmmsk..',
+  '..kmddddddddmk..',
+  '..kmvrrVVrrvmk..',
+  '..kmvrWWWWvrkm..',
+  '..kmddddddddmk..',
+  '...kkmmmmmmkk...',
+];
+
 const SKIN_HEADS: Record<Exclude<SkinId, 'strider'>, string[]> = {
   cyclops: CYCLOPS_HEAD_IDLE,
   robot: ROBOT_HEAD_IDLE,
@@ -953,6 +1365,18 @@ const SKIN_HEADS: Record<Exclude<SkinId, 'strider'>, string[]> = {
   ghost: GHOST_HEAD_IDLE,
   astronaut: ASTRONAUT_HEAD_IDLE,
   demon: DEMON_HEAD_IDLE,
+  paladin: PALADIN_HEAD_IDLE,
+  samurai: SAMURAI_HEAD_IDLE,
+  ascendant: ASCENDANT_HEAD_IDLE,
+  plague: PLAGUE_HEAD_IDLE,
+  phoenix: PHOENIX_HEAD_IDLE,
+  stalker: STALKER_HEAD_IDLE,
+  chrono: CHRONO_HEAD_IDLE,
+  werewolf: WEREWOLF_HEAD_IDLE,
+  trailrunner: TRAILRUNNER_HEAD_IDLE,
+  skeleton: SKELETON_HEAD_IDLE,
+  banshee: BANSHEE_HEAD_IDLE,
+  possessed_armor: POSSESSED_ARMOR_HEAD_IDLE,
 };
 
 function buildSkinRows(skin: SkinId, pose: PlayerPose): string[] {
@@ -1010,6 +1434,54 @@ function buildSkinRows(skin: SkinId, pose: PlayerPose): string[] {
     base[8] = '.kRRvvvvvvvvRRk.';
     base[9] = 'kRkRvvfFFfvvRkRk';
     base[10] = '..kRvvrrrrvvRk..';
+  } else if (skin === 'paladin') {
+    base[8] = '.kAAwwwwwwwwAAk.';
+    base[9] = '.kBwwBBAAbbwwBk.';
+    base[10] = '..kBBwwAAwwBBk..';
+  } else if (skin === 'samurai') {
+    base[8] = '.krrddddddddrrk.';
+    base[9] = '.kdGGddddddGGdk.';
+    base[10] = '..kddAArrAAddk..';
+  } else if (skin === 'ascendant') {
+    base[8] = '.kPPVVWWWWVVPPk.';
+    base[9] = 'kPVkVVAAAAVVkVPk';
+    base[10] = '.kPk.kVVVVk.kPk.';
+  } else if (skin === 'plague') {
+    base[8] = '.kddssEEEEssddk.';
+    base[9] = '.kddssWWWWssddk.';
+    base[10] = '..kddddEEddddk..';
+  } else if (skin === 'phoenix') {
+    base[8] = 'kffkAAWWWWAAkffk';
+    base[9] = 'kFFkAACCCCAAkFFk';
+    base[10] = '.kk.kAAAAAAk.kk.';
+  } else if (skin === 'stalker') {
+    base[8] = '.kPPvvvvvvvvPPk.';
+    base[9] = '.kPvvTTTTTTvvPk.';
+    base[10] = '..kPPvvvvvvPPk..';
+  } else if (skin === 'chrono') {
+    base[8] = '.kAAoCCCCCCoAAk.';
+    base[9] = 'kAAooCWWWWCooAAk';
+    base[10] = '.kk.kAAAAAAk.kk.';
+  } else if (skin === 'werewolf') {
+    base[8] = '.khhmmmmmmmmhhk.';
+    base[9] = 'khmkmmsWWsmmkmhk';
+    base[10] = 'kdk.kmssddmk.kdk';
+  } else if (skin === 'trailrunner') {
+    base[8] = '.kEEddddddddEEk.';
+    base[9] = '.kEdAAWWWWAAdEk.';
+    base[10] = '..kddAAAAAAddk..';
+  } else if (skin === 'skeleton') {
+    base[8] = '..kkvvvvvvvvkk..';
+    base[9] = '.kwkvwvwwvwvkwk.';
+    base[10] = '..kkvwwvvwwvkk..';
+  } else if (skin === 'banshee') {
+    base[8] = '.kCCGGGGGGGGCCk.';
+    base[9] = 'kCGkCCWWWWCCkGCk';
+    base[10] = 'kCk.kCCGGCCk.kCk';
+  } else if (skin === 'possessed_armor') {
+    base[8] = '.kmmddddddddmmk.';
+    base[9] = 'kmkmdVVrrVVdmkdk';
+    base[10] = '.kk.kmdrrdmkk.kk';
   }
 
   return base;
@@ -1026,10 +1498,42 @@ const SKIN_PALETTE_OVERRIDES: Record<SkinId, Record<string, string>> = {
   ghost: { b: '#0284c7', B: '#38bdf8', S: '#bae6fd', d: '#0369a1', m: '#67e8f9' },
   astronaut: { b: '#cbd5e1', B: '#e2e8f0', S: '#f8fafc', d: '#475569', m: '#f97316' },
   demon: { b: '#7f1d1d', B: '#991b1b', S: '#fca5a5', d: '#450a0a', m: '#fbbf24' },
+  paladin: { b: '#0284c7', B: '#38bdf8', S: '#f8fafc', d: '#1e3a8a', m: '#fde047' },
+  samurai: { b: '#1e293b', B: '#0f172a', S: '#22d3ee', d: '#1e293b', m: '#22d3ee' },
+  ascendant: { b: '#581c87', B: '#9333ea', S: '#f3e8ff', d: '#3b0764', m: '#fde047' },
+  plague: { b: '#064e3b', B: '#047857', S: '#d1fae5', d: '#0f172a', m: '#34d399', e: '#059669', E: '#34d399' },
+  phoenix: { b: '#c2410c', B: '#f97316', S: '#fef3c7', d: '#7c2d12', m: '#fbbf24' },
+  stalker: { b: '#3b0764', B: '#581c87', S: '#f5d0fe', d: '#0f0720', m: '#e879f9', t: '#c026d3', T: '#f0abfc' },
+  chrono: { b: '#92400e', B: '#d97706', S: '#fef3c7', d: '#451a03', m: '#38bdf8', a: '#d97706', A: '#fde047' },
+  werewolf: { b: '#475569', B: '#64748b', S: '#cbd5e1', d: '#1e293b', m: '#94a3b8', r: '#ef4444' },
+  trailrunner: { b: '#059669', B: '#10b981', S: '#ecfdf5', d: '#064e3b', m: '#fde047', e: '#059669', E: '#34d399' },
+  skeleton: { b: '#cbd5e1', B: '#f1f5f9', S: '#f8fafc', d: '#1e293b', m: '#e2e8f0', G: '#38bdf8' },
+  banshee: { b: '#0891b2', B: '#22d3ee', S: '#ecfeff', d: '#164e63', m: '#a5f3fc', g: '#06b6d4', G: '#67e8f9', C: '#cffafe' },
+  possessed_armor: { b: '#4c1d95', B: '#6d28d9', S: '#fca5a5', d: '#1e293b', m: '#64748b', r: '#ef4444', V: '#a855f7' },
 };
 
 let atlasCache: Record<SpriteName, HTMLCanvasElement> | null = null;
 const skinAtlasCache: Partial<Record<SkinId, Record<PlayerPose, HTMLCanvasElement>>> = {};
+const themeBrickCache: Partial<
+  Record<BiomeThemeId, { wall: HTMLCanvasElement; ledge: HTMLCanvasElement; pillar: HTMLCanvasElement }>
+> = {};
+
+export function getThemeBrickSprites(themeId: BiomeThemeId): {
+  wall: HTMLCanvasElement;
+  ledge: HTMLCanvasElement;
+  pillar: HTMLCanvasElement;
+} {
+  if (!themeBrickCache[themeId]) {
+    const def = THEMES.find((t) => t.id === themeId);
+    const pal = def?.brickPalette;
+    themeBrickCache[themeId] = {
+      wall: makeCanvas(WALL_BRICK, pal),
+      ledge: makeCanvas(LEDGE_BRICK, pal),
+      pillar: makeCanvas(PILLAR_BRICK, pal),
+    };
+  }
+  return themeBrickCache[themeId]!;
+}
 
 export function getSkinSprite(skin: SkinId, pose: PlayerPose): HTMLCanvasElement {
   if (!skinAtlasCache[skin]) {
@@ -1083,6 +1587,22 @@ export function getSpriteAtlas(): Record<SpriteName, HTMLCanvasElement> {
     bounce_idle: makeCanvas(BOUNCE_IDLE),
     bounce_active: makeCanvas(BOUNCE_ACTIVE),
     moving_plat: makeCanvas(MOVING_PLAT),
+    crusher_idle: makeCanvas(CRUSHER_IDLE),
+    crusher_warn: makeCanvas(CRUSHER_WARN),
+    flame_vent_right: makeCanvas(FLAME_VENT_RIGHT),
+    flame_vent_down: makeCanvas(rotateRows90(FLAME_VENT_RIGHT)),
+    flame_vent_left: makeCanvas(rotateRows180(FLAME_VENT_RIGHT)),
+    flame_vent_up: makeCanvas(rotateRows270(FLAME_VENT_RIGHT)),
+    flame_jet_0: makeCanvas(FLAME_JET_0),
+    flame_jet_1: makeCanvas(FLAME_JET_1),
+    coil_idle: makeCanvas(COIL_IDLE),
+    coil_warn: makeCanvas(COIL_WARN),
+    coil_fire: makeCanvas(COIL_FIRE),
+    acid_vent_idle: makeCanvas(ACID_VENT_IDLE),
+    acid_vent_drip: makeCanvas(ACID_VENT_DRIP),
+    acid_drop: makeCanvas(ACID_DROP),
+    pendulum_pivot: makeCanvas(PENDULUM_PIVOT),
+    pendulum_mace: makeCanvas(PENDULUM_MACE),
     sign_right: makeCanvas(SIGN_RIGHT),
     sign_left: makeCanvas(rotateRows180(SIGN_RIGHT)),
     sign_up: makeCanvas(rotateRows270(SIGN_RIGHT)),

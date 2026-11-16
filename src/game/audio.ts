@@ -114,6 +114,36 @@ class RetroAudio {
     this.playTone(520, 1080, 0.11, 'square', 0.05, 0.03);
   }
 
+  public crusherSlam() {
+    this.playTone(130, 42, 0.18, 'sawtooth', 0.09);
+    this.playTone(90, 36, 0.2, 'square', 0.06, 0.02);
+  }
+
+  public flameBurst() {
+    this.playTone(240, 110, 0.14, 'sawtooth', 0.045);
+  }
+
+  public themeUnlock() {
+    this.playTone(440, 554, 0.08, 'triangle', 0.07);
+    this.playTone(554, 659, 0.08, 'triangle', 0.07, 0.07);
+    this.playTone(659, 880, 0.16, 'square', 0.065, 0.14);
+  }
+
+  public electricZap() {
+    this.playTone(920, 340, 0.08, 'sawtooth', 0.055);
+    this.playTone(1240, 620, 0.07, 'square', 0.04, 0.03);
+  }
+
+  public acidSplash() {
+    this.playTone(320, 140, 0.09, 'triangle', 0.035);
+  }
+
+  public revive() {
+    this.playTone(392, 523, 0.09, 'triangle', 0.08);
+    this.playTone(523, 659, 0.09, 'triangle', 0.08, 0.07);
+    this.playTone(659, 1046, 0.16, 'square', 0.07, 0.14);
+  }
+
   public death() {
     this.playTone(260, 55, 0.28, 'sawtooth', 0.11);
     this.playTone(180, 42, 0.34, 'square', 0.08, 0.05);

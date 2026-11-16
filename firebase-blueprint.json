@@ -1,0 +1,231 @@
+{
+  "entities": {
+    "UserSave": {
+      "title": "UserSave",
+      "description": "Private cloud save state for an authenticated Pixel Spire climber.",
+      "type": "object",
+      "properties": {
+        "uid": {
+          "type": "string",
+          "description": "Firebase Auth UID of the save owner.",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[a-zA-Z0-9_\\-]+$"
+        },
+        "username": {
+          "type": "string",
+          "description": "Player's chosen unique username, or empty if not yet claimed.",
+          "minLength": 0,
+          "maxLength": 20,
+          "pattern": "^$|^[a-zA-Z0-9_]{3,20}$"
+        },
+        "bestScore": {
+          "type": "integer",
+          "description": "Highest run score achieved."
+        },
+        "bestAltitudeMeters": {
+          "type": "integer",
+          "description": "Highest altitude reached in meters."
+        },
+        "totalGems": {
+          "type": "integer",
+          "description": "Persistent spendable gem balance."
+        },
+        "freeHeadstarts": {
+          "type": "integer",
+          "description": "Stocked free 100m headstart tokens earned from Mon-Fri Online Races."
+        },
+        "claimedRaceWeeks": {
+          "type": "array",
+          "description": "List of completed race week IDs whose podium rewards have been claimed (max 32)."
+        },
+        "selectedSkin": {
+          "type": "string",
+          "description": "Currently equipped climber skin ID.",
+          "minLength": 1,
+          "maxLength": 32,
+          "pattern": "^[a-z0-9_]+$"
+        },
+        "unlockedSkins": {
+          "type": "array",
+          "description": "List of unlocked climber skin IDs (max 22)."
+        },
+        "selectedTheme": {
+          "type": "string",
+          "description": "Currently active dungeon theme ID or dynamic mode.",
+          "minLength": 1,
+          "maxLength": 32,
+          "pattern": "^[a-z0-9_]+$"
+        },
+        "unlockedThemes": {
+          "type": "array",
+          "description": "List of unlocked dungeon theme IDs (max 9)."
+        },
+        "secretUnlocked": {
+          "type": "boolean",
+          "description": "Whether the secret climber skin has been unlocked."
+        },
+        "secretRevealMethod": {
+          "type": "string",
+          "description": "Revealed unlock method text once secret skin is earned.",
+          "minLength": 0,
+          "maxLength": 160
+        },
+        "createdAt": {
+          "type": "string",
+          "format": "date-time",
+          "description": "Server timestamp when cloud save was initialized."
+        },
+        "updatedAt": {
+          "type": "string",
+          "format": "date-time",
+          "description": "Server timestamp of the latest cloud save sync."
+        }
+      },
+      "required": [
+        "uid",
+        "username",
+        "bestScore",
+        "bestAltitudeMeters",
+        "totalGems",
+        "selectedSkin",
+        "unlockedSkins",
+        "selectedTheme",
+        "unlockedThemes",
+        "secretUnlocked",
+        "secretRevealMethod",
+        "createdAt",
+        "updatedAt"
+      ]
+    },
+    "UsernameClaim": {
+      "title": "UsernameClaim",
+      "description": "Unique lowercase username reservation mapping a handle to its owner UID.",
+      "type": "object",
+      "properties": {
+        "uid": {
+          "type": "string",
+          "description": "Firebase Auth UID of the user who owns this username.",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[a-zA-Z0-9_\\-]+$"
+        },
+        "username": {
+          "type": "string",
+          "description": "Display-cased unique username (3-20 alphanumeric/underscore).",
+          "minLength": 3,
+          "maxLength": 20,
+          "pattern": "^[a-zA-Z0-9_]{3,20}$"
+        },
+        "usernameLower": {
+          "type": "string",
+          "description": "Lowercase normalized username matching document ID.",
+          "minLength": 3,
+          "maxLength": 20,
+          "pattern": "^[a-z0-9_]{3,20}$"
+        },
+        "createdAt": {
+          "type": "string",
+          "format": "date-time",
+          "description": "Server timestamp when the username was claimed."
+        },
+        "updatedAt": {
+          "type": "string",
+          "format": "date-time",
+          "description": "Server timestamp of latest update."
+        }
+      },
+      "required": [
+        "uid",
+        "username",
+        "usernameLower",
+        "createdAt",
+        "updatedAt"
+      ]
+    },
+    "RaceEntry": {
+      "title": "RaceEntry",
+      "description": "Public weekly Mon-Fri Online Race leaderboard entry for an authenticated climber (zero PII).",
+      "type": "object",
+      "properties": {
+        "uid": {
+          "type": "string",
+          "description": "Firebase Auth UID of the racer.",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[a-zA-Z0-9_\\-]+$"
+        },
+        "displayName": {
+          "type": "string",
+          "description": "Public climber handle or display alias (no email/PII).",
+          "minLength": 1,
+          "maxLength": 24
+        },
+        "skinId": {
+          "type": "string",
+          "description": "Equipped climber skin ID during the best race run.",
+          "minLength": 1,
+          "maxLength": 32,
+          "pattern": "^[a-z0-9_]+$"
+        },
+        "bestAltitudeMeters": {
+          "type": "integer",
+          "description": "Highest altitude reached in this weekly race."
+        },
+        "bestScore": {
+          "type": "integer",
+          "description": "Highest score achieved in this weekly race."
+        },
+        "bestTimeSec": {
+          "type": "number",
+          "description": "Elapsed seconds for the best altitude run."
+        },
+        "runsCount": {
+          "type": "integer",
+          "description": "Number of race attempts logged this week."
+        },
+        "createdAt": {
+          "type": "string",
+          "format": "date-time",
+          "description": "Server timestamp when the racer entered this week's race."
+        },
+        "updatedAt": {
+          "type": "string",
+          "format": "date-time",
+          "description": "Server timestamp of the latest race entry update."
+        }
+      },
+      "required": [
+        "uid",
+        "displayName",
+        "skinId",
+        "bestAltitudeMeters",
+        "bestScore",
+        "bestTimeSec",
+        "runsCount",
+        "createdAt",
+        "updatedAt"
+      ]
+    }
+  },
+  "firestore": {
+    "/users/{userId}": {
+      "schema": {
+        "$ref": "#/entities/UserSave"
+      },
+      "description": "Private cloud save profile belonging strictly to userId."
+    },
+    "/usernames/{usernameLower}": {
+      "schema": {
+        "$ref": "#/entities/UsernameClaim"
+      },
+      "description": "Unique username reservation documents enforcing case-insensitive uniqueness."
+    },
+    "/weeklyRaces/{weekId}/entries/{userId}": {
+      "schema": {
+        "$ref": "#/entities/RaceEntry"
+      },
+      "description": "Public Mon-Fri weekly online race standings keyed by ISO weekId and racer UID."
+    }
+  }
+}

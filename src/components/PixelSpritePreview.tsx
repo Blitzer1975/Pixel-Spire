@@ -8,6 +8,7 @@ interface PixelSpritePreviewProps {
   pose?: PlayerPose;
   size?: number;
   label: string;
+  mystery?: boolean;
 }
 
 export function PixelSpritePreview({
@@ -16,6 +17,7 @@ export function PixelSpritePreview({
   pose = 'idle',
   size = 32,
   label,
+  mystery = false,
 }: PixelSpritePreviewProps) {
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
 
@@ -26,13 +28,29 @@ export function PixelSpritePreview({
     if (!ctx) return;
     ctx.imageSmoothingEnabled = false;
     ctx.clearRect(0, 0, TILE, TILE);
+
+    if (mystery) {
+      ctx.fillStyle = '#1e293b';
+      ctx.fillRect(2, 1, 12, 14);
+      ctx.fillStyle = '#0f172a';
+      ctx.fillRect(3, 2, 10, 12);
+      ctx.fillStyle = '#c084fc';
+      // 16x16 pixel "?" glyph
+      ctx.fillRect(6, 4, 4, 1);
+      ctx.fillRect(5, 5, 2, 1);
+      ctx.fillRect(9, 5, 2, 2);
+      ctx.fillRect(7, 7, 2, 2);
+      ctx.fillRect(7, 11, 2, 2);
+      return;
+    }
+
     if (skin) {
       ctx.drawImage(getSkinSprite(skin, pose), 0, 0);
     } else if (sprite) {
       const atlas = getSpriteAtlas();
       ctx.drawImage(atlas[sprite], 0, 0);
     }
-  }, [sprite, skin, pose]);
+  }, [sprite, skin, pose, mystery]);
 
   return (
     <canvas

@@ -1,0 +1,374 @@
+rules_version = '2';
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+    // Global default-deny safety net
+    match /{document=**} {
+      allow read, write: if false;
+    }
+
+    function isValidId(id) {
+      return id is string && id.size() >= 1 && id.size() <= 128 && id.matches('^[a-zA-Z0-9_\\-]+$');
+    }
+
+    function isValidUsernameId(id) {
+      return id is string && id.size() >= 3 && id.size() <= 20 && id.matches('^[a-z0-9_]{3,20}$');
+    }
+
+    function isValidWeekId(id) {
+      return id is string && id.size() >= 7 && id.size() <= 16 && id.matches('^[0-9]{4}-W[0-9]{2}$');
+    }
+
+    function incoming() {
+      return request.resource.data;
+    }
+
+    function existing() {
+      return resource.data;
+    }
+
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    function isVerifiedUser() {
+      return isSignedIn() && request.auth.token.email_verified == true;
+    }
+
+    function isOwner(userId) {
+      return isSignedIn() && request.auth.uid == userId;
+    }
+
+    function isAllowedSkin(skinId) {
+      return skinId in [
+        'strider',
+        'cyclops',
+        'ninja',
+        'robot',
+        'knight',
+        'gargoyle',
+        'ghost',
+        'vampire',
+        'astronaut',
+        'demon',
+        'paladin',
+        'samurai',
+        'ascendant',
+        'plague',
+        'phoenix',
+        'stalker',
+        'chrono',
+        'werewolf',
+        'trailrunner',
+        'banshee',
+        'possessed_armor',
+        'skeleton'
+      ];
+    }
+
+    function isAllowedTheme(themeId) {
+      return themeId in [
+        'dynamic',
+        'obsidian',
+        'emerald',
+        'crimson',
+        'frost',
+        'astral',
+        'toxic',
+        'suntemple',
+        'neoncore'
+      ];
+    }
+
+    function isValidUserSave(data, userId) {
+      return data.keys().hasAll([
+          'uid',
+          'username',
+          'bestScore',
+          'bestAltitudeMeters',
+          'totalGems',
+          'selectedSkin',
+          'unlockedSkins',
+          'selectedTheme',
+          'unlockedThemes',
+          'secretUnlocked',
+          'secretRevealMethod',
+          'createdAt',
+          'updatedAt'
+        ]) &&
+        data.keys().hasOnly([
+          'uid',
+          'username',
+          'bestScore',
+          'bestAltitudeMeters',
+          'totalGems',
+          'freeHeadstarts',
+          'claimedRaceWeeks',
+          'selectedSkin',
+          'unlockedSkins',
+          'selectedTheme',
+          'unlockedThemes',
+          'secretUnlocked',
+          'secretRevealMethod',
+          'createdAt',
+          'updatedAt'
+        ]) &&
+        data.uid is string &&
+        data.uid.size() >= 1 &&
+        data.uid.size() <= 128 &&
+        data.uid == request.auth.uid &&
+        data.uid == userId &&
+        data.username is string &&
+        data.username.size() <= 20 &&
+        (
+          data.username == '' ||
+          (data.username.size() >= 3 && data.username.matches('^[a-zA-Z0-9_]{3,20}$'))
+        ) &&
+        data.bestScore is int &&
+        data.bestScore >= 0 &&
+        data.bestScore <= 100000000 &&
+        data.bestAltitudeMeters is int &&
+        data.bestAltitudeMeters >= 0 &&
+        data.bestAltitudeMeters <= 10000000 &&
+        data.totalGems is int &&
+        data.totalGems >= 0 &&
+        data.totalGems <= 10000000 &&
+        (!('freeHeadstarts' in data) || (data.freeHeadstarts is int && data.freeHeadstarts >= 0 && data.freeHeadstarts <= 1000)) &&
+        (!('claimedRaceWeeks' in data) || (
+          data.claimedRaceWeeks is list &&
+          data.claimedRaceWeeks.size() <= 32 &&
+          (data.claimedRaceWeeks.size() == 0 || data.claimedRaceWeeks[0] is string)
+        )) &&
+        data.selectedSkin is string &&
+        data.selectedSkin.size() >= 1 &&
+        data.selectedSkin.size() <= 32 &&
+        isAllowedSkin(data.selectedSkin) &&
+        data.unlockedSkins is list &&
+        data.unlockedSkins.size() >= 1 &&
+        data.unlockedSkins.size() <= 22 &&
+        data.unlockedSkins[0] is string &&
+        data.unlockedSkins.hasOnly([
+          'strider',
+          'cyclops',
+          'ninja',
+          'robot',
+          'knight',
+          'gargoyle',
+          'ghost',
+          'vampire',
+          'astronaut',
+          'demon',
+          'paladin',
+          'samurai',
+          'ascendant',
+          'plague',
+          'phoenix',
+          'stalker',
+          'chrono',
+          'werewolf',
+          'trailrunner',
+          'banshee',
+          'possessed_armor',
+          'skeleton'
+        ]) &&
+        data.selectedTheme is string &&
+        data.selectedTheme.size() >= 1 &&
+        data.selectedTheme.size() <= 32 &&
+        isAllowedTheme(data.selectedTheme) &&
+        data.unlockedThemes is list &&
+        data.unlockedThemes.size() >= 1 &&
+        data.unlockedThemes.size() <= 9 &&
+        data.unlockedThemes[0] is string &&
+        data.unlockedThemes.hasOnly([
+          'dynamic',
+          'obsidian',
+          'emerald',
+          'crimson',
+          'frost',
+          'astral',
+          'toxic',
+          'suntemple',
+          'neoncore'
+        ]) &&
+        data.secretUnlocked is bool &&
+        data.secretRevealMethod is string &&
+        data.secretRevealMethod.size() <= 160 &&
+        data.createdAt is timestamp &&
+        data.updatedAt is timestamp;
+    }
+
+    function isValidUsernameClaim(data, usernameLower) {
+      return data.keys().hasAll([
+          'uid',
+          'username',
+          'usernameLower',
+          'createdAt',
+          'updatedAt'
+        ]) &&
+        data.keys().hasOnly([
+          'uid',
+          'username',
+          'usernameLower',
+          'createdAt',
+          'updatedAt'
+        ]) &&
+        data.uid is string &&
+        data.uid.size() >= 1 &&
+        data.uid.size() <= 128 &&
+        data.uid == request.auth.uid &&
+        data.username is string &&
+        data.username.size() >= 3 &&
+        data.username.size() <= 20 &&
+        data.username.matches('^[a-zA-Z0-9_]{3,20}$') &&
+        data.usernameLower is string &&
+        data.usernameLower.size() >= 3 &&
+        data.usernameLower.size() <= 20 &&
+        data.usernameLower.matches('^[a-z0-9_]{3,20}$') &&
+        data.usernameLower == usernameLower &&
+        data.username.lower() == usernameLower &&
+        data.createdAt is timestamp &&
+        data.updatedAt is timestamp;
+    }
+
+    function isValidRaceEntry(data, userId) {
+      return data.keys().hasAll([
+          'uid',
+          'displayName',
+          'skinId',
+          'bestAltitudeMeters',
+          'bestScore',
+          'bestTimeSec',
+          'runsCount',
+          'createdAt',
+          'updatedAt'
+        ]) &&
+        data.keys().hasOnly([
+          'uid',
+          'displayName',
+          'skinId',
+          'bestAltitudeMeters',
+          'bestScore',
+          'bestTimeSec',
+          'runsCount',
+          'createdAt',
+          'updatedAt'
+        ]) &&
+        data.uid is string &&
+        data.uid.size() >= 1 &&
+        data.uid.size() <= 128 &&
+        data.uid == request.auth.uid &&
+        data.uid == userId &&
+        data.displayName is string &&
+        data.displayName.size() >= 1 &&
+        data.displayName.size() <= 24 &&
+        data.skinId is string &&
+        data.skinId.size() >= 1 &&
+        data.skinId.size() <= 32 &&
+        isAllowedSkin(data.skinId) &&
+        data.bestAltitudeMeters is int &&
+        data.bestAltitudeMeters >= 0 &&
+        data.bestAltitudeMeters <= 10000000 &&
+        data.bestScore is int &&
+        data.bestScore >= 0 &&
+        data.bestScore <= 100000000 &&
+        (data.bestTimeSec is int || data.bestTimeSec is float) &&
+        data.bestTimeSec >= 0 &&
+        data.bestTimeSec <= 864000 &&
+        data.runsCount is int &&
+        data.runsCount >= 1 &&
+        data.runsCount <= 10000 &&
+        data.createdAt is timestamp &&
+        data.updatedAt is timestamp;
+    }
+
+    match /users/{userId} {
+      allow get: if isValidId(userId) && isOwner(userId);
+      allow list: if false;
+      allow create: if isValidId(userId) &&
+        isVerifiedUser() &&
+        isOwner(userId) &&
+        isValidUserSave(incoming(), userId) &&
+        incoming().createdAt == request.time &&
+        incoming().updatedAt == request.time &&
+        incoming().username == '';
+      allow update: if isValidId(userId) &&
+        isVerifiedUser() &&
+        isOwner(userId) &&
+        isValidUserSave(incoming(), userId) &&
+        incoming().uid == existing().uid &&
+        incoming().createdAt == existing().createdAt &&
+        incoming().updatedAt == request.time &&
+        (
+          incoming().diff(existing()).affectedKeys().hasOnly([
+            'bestScore',
+            'bestAltitudeMeters',
+            'totalGems',
+            'freeHeadstarts',
+            'claimedRaceWeeks',
+            'selectedSkin',
+            'unlockedSkins',
+            'selectedTheme',
+            'unlockedThemes',
+            'secretUnlocked',
+            'secretRevealMethod',
+            'updatedAt'
+          ]) ||
+          (
+            incoming().diff(existing()).affectedKeys().hasOnly(['username', 'updatedAt']) &&
+            incoming().username.size() >= 3 &&
+            existsAfter(/databases/$(database)/documents/usernames/$(incoming().username.lower())) &&
+            getAfter(/databases/$(database)/documents/usernames/$(incoming().username.lower())).data.uid == request.auth.uid
+          )
+        );
+      allow delete: if false;
+    }
+
+    match /usernames/{usernameLower} {
+      allow get: if isValidUsernameId(usernameLower) && isSignedIn();
+      allow list: if false;
+      allow create: if isValidUsernameId(usernameLower) &&
+        isVerifiedUser() &&
+        isValidUsernameClaim(incoming(), usernameLower) &&
+        incoming().createdAt == request.time &&
+        incoming().updatedAt == request.time &&
+        existsAfter(/databases/$(database)/documents/users/$(request.auth.uid)) &&
+        getAfter(/databases/$(database)/documents/users/$(request.auth.uid)).data.username.lower() == usernameLower;
+      allow update: if false;
+      allow delete: if isValidUsernameId(usernameLower) &&
+        isVerifiedUser() &&
+        existing().uid == request.auth.uid;
+    }
+
+    match /weeklyRaces/{weekId}/entries/{userId} {
+      allow get: if isValidWeekId(weekId) && isValidId(userId) && isSignedIn();
+      allow list: if isValidWeekId(weekId) &&
+        isSignedIn() &&
+        resource.data.bestAltitudeMeters >= 0;
+      allow create: if isValidWeekId(weekId) &&
+        isValidId(userId) &&
+        isVerifiedUser() &&
+        isOwner(userId) &&
+        isValidRaceEntry(incoming(), userId) &&
+        incoming().createdAt == request.time &&
+        incoming().updatedAt == request.time;
+      allow update: if isValidWeekId(weekId) &&
+        isValidId(userId) &&
+        isVerifiedUser() &&
+        isOwner(userId) &&
+        isValidRaceEntry(incoming(), userId) &&
+        incoming().uid == existing().uid &&
+        incoming().createdAt == existing().createdAt &&
+        incoming().updatedAt == request.time &&
+        incoming().diff(existing()).affectedKeys().hasOnly([
+          'displayName',
+          'skinId',
+          'bestAltitudeMeters',
+          'bestScore',
+          'bestTimeSec',
+          'runsCount',
+          'updatedAt'
+        ]);
+      allow delete: if false;
+    }
+  }
+}

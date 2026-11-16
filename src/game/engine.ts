@@ -1,17 +1,23 @@
 import { retroAudio } from './audio';
 import { LevelGenerator, WorldEntities } from './levelGen';
-import { getSkinSprite, getSpriteAtlas, SpriteName } from './sprites';
+import { getSkinSprite, getSpriteAtlas, getThemeBrickSprites, SpriteName } from './sprites';
 import {
   Afterimage,
+  BIOME_ORDER,
+  BiomeThemeId,
   FloatingText,
+  GameMode,
   GameState,
   GrappleRing,
   HudSnapshot,
   Particle,
   Player,
   PlayerPose,
+  SECRET_SKIN_UNLOCK_METHOD,
   SkinId,
   SKINS,
+  ThemeId,
+  THEMES,
   TILE,
   VIRTUAL_H,
   VIRTUAL_W,
@@ -34,11 +40,23 @@ const GRAPPLE_RANGE = 164;
 const GRAPPLE_REEL_SPEED = 395;
 const GRAPPLE_BOOST_VY = -265;
 
+export const REVIVE_COST_GEMS = 50;
+
 const STORAGE_BEST_SCORE = 'pixel_spire_best_score_v1';
 const STORAGE_BEST_ALT = 'pixel_spire_best_alt_v1';
 const STORAGE_GEMS = 'pixel_spire_gems_v1';
 const STORAGE_UNLOCKED_SKINS = 'pixel_spire_unlocked_skins_v1';
 const STORAGE_SELECTED_SKIN = 'pixel_spire_selected_skin_v1';
+const STORAGE_UNLOCKED_THEMES = 'pixel_spire_unlocked_themes_v1';
+const STORAGE_SELECTED_THEME = 'pixel_spire_selected_theme_v1';
+const STORAGE_SECRET_UNLOCKED = 'pixel_spire_secret_ascendant_v1';
+const STORAGE_CLAIMED_RACE_WEEKS = 'pixel_spire_claimed_race_weeks_v1';
+
+export interface RaceRivalMarker {
+  uid: string;
+  displayName: string;
+  altitudeMeters: number;
+}
 
 export interface InputState {
   left: boolean;
@@ -53,6 +71,7 @@ export interface InputState {
 
 export class GameEngine {
   public state: GameState = 'TITLE_MENU';
+  public gameMode: GameMode = 'endless';
   public world: WorldEntities = {
     solids: [],
     crumbles: [],
@@ -65,6 +84,12 @@ export class GameEngine {
     turrets: [],
     darts: [],
     bats: [],
+    crushers: [],
+    flameJets: [],
+    shockCoils: [],
+    acidDrips: [],
+    acidDrops: [],
+    pendulums: [],
     rings: [],
     gems: [],
     signs: [],
@@ -78,12 +103,20 @@ export class GameEngine {
   public magmaY = VIRTUAL_H + 140;
   public magmaActive = false;
   public time = 0;
+  public runElapsedSec = 0;
   public score = 0;
   public styleScore = 0;
   public gemsCollected = 0;
   public totalGems = 0;
+  public claimedRaceWeeks: string[] = [];
+  public revivedThisRun = false;
+  public raceSeed: number | undefined = undefined;
+  public raceRivals: RaceRivalMarker[] = [];
   public selectedSkin: SkinId = 'strider';
   public unlockedSkins: SkinId[] = ['strider'];
+  public selectedTheme: ThemeId = 'dynamic';
+  public unlockedThemes: ThemeId[] = ['dynamic', 'obsidian'];
+  public secretUnlocked = false;
   public wingsCleared = 0;
   public comboCount = 0;
   public comboTimer = 0;
@@ -94,6 +127,7 @@ export class GameEngine {
   private shakeTimer = 0;
   private shakeIntensity = 0;
   private wallJumpLockTimer = 0;
+  private didBackflipThisRun = false;
   private visitedSlices = new Set<number>();
   private particles: Particle[] = [];
   private afterimages: Afterimage[] = [];
@@ -101,6 +135,7 @@ export class GameEngine {
   private levelGen = new LevelGenerator();
   private nearestRing: GrappleRing | null = null;
   private onHudUpdate: (hud: HudSnapshot) => void;
+  private onProgressChange?: () => void;
   private hudSyncCounter = 0;
 
   constructor(onHudUpdate: (hud: HudSnapshot) => void) {
@@ -109,21 +144,162 @@ export class GameEngine {
       this.bestScore = Number(localStorage.getItem(STORAGE_BEST_SCORE) || 0) || 0;
       this.bestAltitudeMeters = Number(localStorage.getItem(STORAGE_BEST_ALT) || 0) || 0;
       this.totalGems = Math.max(0, Number(localStorage.getItem(STORAGE_GEMS) || 0) || 0);
+
+      const savedClaimed = localStorage.getItem(STORAGE_CLAIMED_RACE_WEEKS);
+      if (savedClaimed) {
+        const parsedClaimed = JSON.parse(savedClaimed) as string[];
+        if (Array.isArray(parsedClaimed)) {
+          this.claimedRaceWeeks = parsedClaimed.filter((w) => typeof w === 'string' && w.length > 0).slice(0, 32);
+        }
+      }
+
       const savedSkins = localStorage.getItem(STORAGE_UNLOCKED_SKINS);
       if (savedSkins) {
         const parsed = JSON.parse(savedSkins) as SkinId[];
+        const validIds = new Set(SKINS.map((s) => s.id));
         if (Array.isArray(parsed) && parsed.length > 0) {
-          this.unlockedSkins = Array.from(new Set<SkinId>(['strider', ...parsed]));
+          this.unlockedSkins = Array.from(
+            new Set<SkinId>(['strider', ...parsed.filter((id) => validIds.has(id))])
+          );
         }
       }
       const savedSelected = localStorage.getItem(STORAGE_SELECTED_SKIN) as SkinId | null;
       if (savedSelected && this.unlockedSkins.includes(savedSelected)) {
         this.selectedSkin = savedSelected;
       }
+
+      const savedThemes = localStorage.getItem(STORAGE_UNLOCKED_THEMES);
+      if (savedThemes) {
+        const parsedThemes = JSON.parse(savedThemes) as ThemeId[];
+        const validThemeIds = new Set(THEMES.map((t) => t.id));
+        if (Array.isArray(parsedThemes) && parsedThemes.length > 0) {
+          this.unlockedThemes = Array.from(
+            new Set<ThemeId>(['dynamic', 'obsidian', ...parsedThemes.filter((id) => validThemeIds.has(id))])
+          );
+        }
+      }
+      const savedSelectedTheme = localStorage.getItem(STORAGE_SELECTED_THEME) as ThemeId | null;
+      if (savedSelectedTheme && this.unlockedThemes.includes(savedSelectedTheme)) {
+        this.selectedTheme = savedSelectedTheme;
+      }
+
+      const savedSecret = localStorage.getItem(STORAGE_SECRET_UNLOCKED);
+      this.secretUnlocked = savedSecret === 'true' || this.unlockedSkins.includes('ascendant');
+      if (this.secretUnlocked && !this.unlockedSkins.includes('ascendant')) {
+        this.unlockedSkins.push('ascendant');
+      }
     } catch {
       // ignore storage failure
     }
     this.resetWorld('TITLE_MENU');
+  }
+
+  public setProgressChangeHandler(cb: () => void) {
+    this.onProgressChange = cb;
+  }
+
+  public setRaceRivals(rivals: RaceRivalMarker[]) {
+    this.raceRivals = rivals;
+  }
+
+  public getCloudSyncPayload() {
+    return {
+      bestScore: Math.max(0, Math.floor(this.bestScore)),
+      bestAltitudeMeters: Math.max(0, Math.floor(this.bestAltitudeMeters)),
+      totalGems: Math.max(0, Math.floor(this.totalGems)),
+      claimedRaceWeeks: this.claimedRaceWeeks.slice(0, 32),
+      selectedSkin: this.selectedSkin,
+      unlockedSkins: this.unlockedSkins,
+      selectedTheme: this.selectedTheme,
+      unlockedThemes: this.unlockedThemes,
+      secretUnlocked: this.secretUnlocked,
+      secretRevealMethod: this.secretUnlocked ? SECRET_SKIN_UNLOCK_METHOD : '',
+    };
+  }
+
+  public applyCloudMerge(cloud: {
+    bestScore: number;
+    bestAltitudeMeters: number;
+    totalGems: number;
+    claimedRaceWeeks?: string[];
+    selectedSkin: SkinId;
+    unlockedSkins: SkinId[];
+    selectedTheme: ThemeId;
+    unlockedThemes: ThemeId[];
+    secretUnlocked: boolean;
+  }) {
+    const validSkinIds = new Set(SKINS.map((s) => s.id));
+    const validThemeIds = new Set(THEMES.map((t) => t.id));
+
+    this.bestScore = Math.max(this.bestScore, cloud.bestScore || 0);
+    this.bestAltitudeMeters = Math.max(this.bestAltitudeMeters, cloud.bestAltitudeMeters || 0);
+    this.totalGems = Math.max(this.totalGems, cloud.totalGems || 0);
+    this.claimedRaceWeeks = Array.from(
+      new Set<string>([
+        ...this.claimedRaceWeeks,
+        ...(Array.isArray(cloud.claimedRaceWeeks) ? cloud.claimedRaceWeeks.filter((w) => typeof w === 'string') : []),
+      ])
+    ).slice(0, 32);
+
+    this.secretUnlocked =
+      this.secretUnlocked ||
+      Boolean(cloud.secretUnlocked) ||
+      (Array.isArray(cloud.unlockedSkins) && cloud.unlockedSkins.includes('ascendant'));
+
+    const mergedSkins = new Set<SkinId>([
+      'strider',
+      ...this.unlockedSkins,
+      ...(Array.isArray(cloud.unlockedSkins) ? cloud.unlockedSkins.filter((s) => validSkinIds.has(s)) : []),
+    ]);
+    if (this.secretUnlocked) mergedSkins.add('ascendant');
+    this.unlockedSkins = Array.from(mergedSkins);
+
+    if (
+      this.selectedSkin === 'strider' &&
+      cloud.selectedSkin &&
+      this.unlockedSkins.includes(cloud.selectedSkin)
+    ) {
+      this.selectedSkin = cloud.selectedSkin;
+    } else if (!this.unlockedSkins.includes(this.selectedSkin)) {
+      this.selectedSkin = 'strider';
+    }
+
+    const mergedThemes = new Set<ThemeId>([
+      'dynamic',
+      'obsidian',
+      ...this.unlockedThemes,
+      ...(Array.isArray(cloud.unlockedThemes) ? cloud.unlockedThemes.filter((t) => validThemeIds.has(t)) : []),
+    ]);
+    this.unlockedThemes = Array.from(mergedThemes);
+
+    if (
+      this.selectedTheme === 'dynamic' &&
+      cloud.selectedTheme &&
+      this.unlockedThemes.includes(cloud.selectedTheme)
+    ) {
+      this.selectedTheme = cloud.selectedTheme;
+    } else if (!this.unlockedThemes.includes(this.selectedTheme)) {
+      this.selectedTheme = 'dynamic';
+    }
+
+    this.persistProgress();
+    this.emitHud();
+  }
+
+  private persistProgress() {
+    try {
+      localStorage.setItem(STORAGE_BEST_SCORE, String(this.bestScore));
+      localStorage.setItem(STORAGE_BEST_ALT, String(this.bestAltitudeMeters));
+      localStorage.setItem(STORAGE_GEMS, String(this.totalGems));
+      localStorage.setItem(STORAGE_CLAIMED_RACE_WEEKS, JSON.stringify(this.claimedRaceWeeks));
+      localStorage.setItem(STORAGE_UNLOCKED_SKINS, JSON.stringify(this.unlockedSkins));
+      localStorage.setItem(STORAGE_SELECTED_SKIN, this.selectedSkin);
+      localStorage.setItem(STORAGE_UNLOCKED_THEMES, JSON.stringify(this.unlockedThemes));
+      localStorage.setItem(STORAGE_SELECTED_THEME, this.selectedTheme);
+      localStorage.setItem(STORAGE_SECRET_UNLOCKED, String(this.secretUnlocked));
+    } catch {
+      // ignore storage errors
+    }
   }
 
   public unlockOrEquipSkin(skinId: SkinId): boolean {
@@ -132,13 +308,14 @@ export class GameEngine {
 
     if (this.unlockedSkins.includes(skinId)) {
       this.selectedSkin = skinId;
-      try {
-        localStorage.setItem(STORAGE_SELECTED_SKIN, skinId);
-      } catch {
-        // ignore
-      }
+      this.persistProgress();
       this.emitHud();
+      this.onProgressChange?.();
       return true;
+    }
+
+    if (def.secret || def.raceReward) {
+      return false;
     }
 
     if (this.totalGems >= def.cost) {
@@ -146,21 +323,74 @@ export class GameEngine {
       this.unlockedSkins = [...this.unlockedSkins, skinId];
       this.selectedSkin = skinId;
       retroAudio.unlockSkin();
-      try {
-        localStorage.setItem(STORAGE_GEMS, String(this.totalGems));
-        localStorage.setItem(STORAGE_UNLOCKED_SKINS, JSON.stringify(this.unlockedSkins));
-        localStorage.setItem(STORAGE_SELECTED_SKIN, skinId);
-      } catch {
-        // ignore
-      }
+      this.persistProgress();
       this.emitHud();
+      this.onProgressChange?.();
       return true;
     }
 
     return false;
   }
 
-  public resetWorld(nextState: GameState) {
+  public applyRaceRewards(
+    weekId: string,
+    rank: 1 | 2 | 3
+  ): { gems: number; skinUnlocked: boolean } | null {
+    if (this.claimedRaceWeeks.includes(weekId)) return null;
+
+    const gems = rank === 1 ? 150 : rank === 2 ? 90 : 50;
+    let skinUnlocked = false;
+
+    this.totalGems += gems;
+    if (rank === 1 && !this.unlockedSkins.includes('trailrunner')) {
+      this.unlockedSkins = [...this.unlockedSkins, 'trailrunner'];
+      skinUnlocked = true;
+    }
+    this.claimedRaceWeeks = [weekId, ...this.claimedRaceWeeks.filter((w) => w !== weekId)].slice(0, 32);
+
+    retroAudio.themeUnlock();
+    this.persistProgress();
+    this.emitHud();
+    this.onProgressChange?.();
+    return { gems, skinUnlocked };
+  }
+
+  public unlockOrEquipTheme(themeId: ThemeId): boolean {
+    const def = THEMES.find((t) => t.id === themeId);
+    if (!def) return false;
+
+    if (this.unlockedThemes.includes(themeId)) {
+      this.selectedTheme = themeId;
+      this.persistProgress();
+      this.emitHud();
+      this.onProgressChange?.();
+      return true;
+    }
+
+    if (this.totalGems >= def.cost) {
+      this.totalGems -= def.cost;
+      this.unlockedThemes = [...this.unlockedThemes, themeId];
+      this.selectedTheme = themeId;
+      retroAudio.themeUnlock();
+      this.persistProgress();
+      this.emitHud();
+      this.onProgressChange?.();
+      return true;
+    }
+
+    return false;
+  }
+
+  public getActiveBiomeId(altitude?: number): BiomeThemeId {
+    if (this.selectedTheme !== 'dynamic') {
+      return this.selectedTheme as BiomeThemeId;
+    }
+    const alt = altitude ?? this.getAltitudeMeters();
+    const index = Math.floor(Math.max(0, alt) / 100) % BIOME_ORDER.length;
+    return BIOME_ORDER[index];
+  }
+
+  public resetWorld(nextState: GameState, seed?: number) {
     this.state = nextState;
     this.world = {
       solids: [],
@@ -174,6 +404,12 @@ export class GameEngine {
       turrets: [],
       darts: [],
       bats: [],
+      crushers: [],
+      flameJets: [],
+      shockCoils: [],
+      acidDrips: [],
+      acidDrops: [],
+      pendulums: [],
       rings: [],
       gems: [],
       signs: [],
@@ -189,6 +425,7 @@ export class GameEngine {
     this.minPlayerY = this.startY;
     this.magmaY = VIRTUAL_H + 96;
     this.magmaActive = false;
+    this.runElapsedSec = 0;
     this.score = 0;
     this.styleScore = 0;
     this.gemsCollected = 0;
@@ -198,7 +435,10 @@ export class GameEngine {
     this.deathReason = '';
     this.shakeTimer = 0;
     this.wallJumpLockTimer = 0;
+    this.didBackflipThisRun = false;
+    this.revivedThisRun = false;
 
+    this.levelGen.setSeed(seed);
     this.levelGen.reset(this.world, VIRTUAL_H);
     this.levelGen.ensureGeneratedUpTo(this.world, -VIRTUAL_H * 1.8);
 
@@ -236,8 +476,97 @@ export class GameEngine {
     this.emitHud();
   }
 
-  public startNewRun() {
-    this.resetWorld('PLAYING');
+  public startNewRun(options?: { mode?: GameMode; raceSeed?: number }): boolean {
+    const mode = options?.mode ?? this.gameMode ?? 'endless';
+    const seed = mode === 'race' ? (options?.raceSeed ?? this.raceSeed) : undefined;
+
+    this.gameMode = mode;
+    this.raceSeed = seed;
+    this.resetWorld('PLAYING', seed);
+    return true;
+  }
+
+  public reviveRun(): boolean {
+    if (this.state !== 'GAME_OVER' || this.revivedThisRun || this.totalGems < REVIVE_COST_GEMS) {
+      return false;
+    }
+
+    this.totalGems -= REVIVE_COST_GEMS;
+    this.revivedThisRun = true;
+
+    const activeSlice = this.findActiveCameraSlice() || {
+      yTop: this.cameraY,
+      yBottom: this.cameraY + VIRTUAL_H,
+      xMin: 0,
+      xMax: VIRTUAL_W,
+    };
+
+    const minSafeX = activeSlice.xMin + TILE * 2;
+    const maxSafeX = activeSlice.xMax - TILE * 5;
+    const clampedBaseX = Math.max(minSafeX, Math.min(maxSafeX, this.player.x - TILE));
+    const ledgeX = Math.round(clampedBaseX / TILE) * TILE;
+
+    let safePlayerY = this.player.y;
+    if (safePlayerY > this.cameraY + VIRTUAL_H - 42) {
+      safePlayerY = this.cameraY + VIRTUAL_H * 0.48;
+    }
+    if (this.magmaActive && safePlayerY + this.player.h > this.magmaY - 40) {
+      safePlayerY = Math.min(safePlayerY, this.magmaY - 96);
+    }
+
+    const ledgeY = Math.round((safePlayerY + this.player.h) / TILE) * TILE;
+
+    // Remove nearby projectiles and spikes so the revive spot is clean
+    this.clearHazardsNear(ledgeX + TILE * 1.5, ledgeY - 12, 44);
+    this.world.solids.push({
+      id: this.levelGen.uid(),
+      x: ledgeX,
+      y: ledgeY,
+      w: TILE * 3,
+      h: TILE,
+      kind: 'ledge',
+    });
+
+    this.player.x = ledgeX + TILE * 1.5 - this.player.w / 2;
+    this.player.y = ledgeY - this.player.h;
+    this.player.vx = 0;
+    this.player.vy = 0;
+    this.player.dead = false;
+    this.player.onGround = true;
+    this.player.canDoubleJump = true;
+    this.player.canBackflip = false;
+    this.player.isBackflipping = false;
+    this.player.grappleTarget = null;
+    this.player.invulnTimer = 2.5;
+
+    if (this.magmaActive) {
+      this.magmaY = Math.max(this.magmaY, this.player.y + 108);
+    }
+
+    this.state = 'PLAYING';
+    this.deathReason = '';
+    retroAudio.revive();
+    this.popups.push({
+      x: this.player.x + this.player.w / 2,
+      y: this.player.y - 14,
+      text: 'REVIVED!',
+      color: '#fbbf24',
+      life: 1.4,
+      maxLife: 1.4,
+    });
+    this.spawnDust(this.player.x + this.player.w / 2, this.player.y + this.player.h / 2, '#fbbf24', 14);
+    this.persistProgress();
+    this.emitHud();
+    this.onProgressChange?.();
+    return true;
+  }
+
+  private clearHazardsNear(cx: number, cy: number, radius: number) {
+    this.world.spikes = this.world.spikes.filter((s) => Math.hypot(s.x + 8 - cx, s.y + 8 - cy) > radius);
+    this.world.darts = this.world.darts.filter((d) => Math.hypot(d.x - cx, d.y - cy) > radius + 24);
+    this.world.acidDrops = this.world.acidDrops.filter((drop) => Math.hypot(drop.x - cx, drop.y - cy) > radius + 24);
+    this.world.saws = this.world.saws.filter((s) => Math.hypot(s.x - cx, s.y - cy) > radius);
+    this.world.bats = this.world.bats.filter((b) => Math.hypot(b.x - cx, b.y - cy) > radius + 16);
   }
 
   public goToMainMenu() {
@@ -269,6 +598,7 @@ export class GameEngine {
     }
 
     this.time += dt;
+    this.runElapsedSec += dt;
     if (this.shakeTimer > 0) this.shakeTimer = Math.max(0, this.shakeTimer - dt);
     if (this.wallJumpLockTimer > 0) this.wallJumpLockTimer = Math.max(0, this.wallJumpLockTimer - dt);
     if (this.comboTimer > 0) {
@@ -317,6 +647,66 @@ export class GameEngine {
     }
     if (altitude > this.bestAltitudeMeters) {
       this.bestAltitudeMeters = altitude;
+    }
+
+    // Unlock Biome Themes automatically on reaching 100m / 200m / 300m / 400m
+    let progressUnlocked = false;
+    for (const theme of THEMES) {
+      if (theme.unlockAltitude > 0 && altitude >= theme.unlockAltitude && !this.unlockedThemes.includes(theme.id)) {
+        this.unlockedThemes = [...this.unlockedThemes, theme.id];
+        retroAudio.themeUnlock();
+        this.popups.push({
+          x: this.player.x + this.player.w / 2,
+          y: this.player.y - 16,
+          text: `THEME: ${theme.name.toUpperCase()}`,
+          color: theme.swatch,
+          life: 1.5,
+          maxLife: 1.5,
+        });
+        this.spawnDust(this.player.x + this.player.w / 2, this.player.y, theme.swatch, 12);
+        progressUnlocked = true;
+      }
+    }
+
+    // Unlock Secret Skin: Ascend to 100m and perform a Backflip in the same run
+    if (!this.secretUnlocked && altitude >= 100 && this.didBackflipThisRun) {
+      this.secretUnlocked = true;
+      if (!this.unlockedSkins.includes('ascendant')) {
+        this.unlockedSkins = [...this.unlockedSkins, 'ascendant'];
+      }
+      retroAudio.themeUnlock();
+      this.popups.push({
+        x: this.player.x + this.player.w / 2,
+        y: this.player.y - 24,
+        text: 'SECRET SKIN: ASCENDANT!',
+        color: '#c084fc',
+        life: 1.8,
+        maxLife: 1.8,
+      });
+      this.spawnDust(this.player.x + this.player.w / 2, this.player.y, '#c084fc', 16);
+      progressUnlocked = true;
+    }
+
+    // Unlock 2nd Secret Skin: Chrono-King (Clear 3 Horizontal Wings and reach 150m in one run)
+    if (!this.unlockedSkins.includes('chrono') && this.wingsCleared >= 3 && altitude >= 150) {
+      this.unlockedSkins = [...this.unlockedSkins, 'chrono'];
+      retroAudio.themeUnlock();
+      this.popups.push({
+        x: this.player.x + this.player.w / 2,
+        y: this.player.y - 24,
+        text: 'SECRET SKIN: CHRONO-KING!',
+        color: '#38bdf8',
+        life: 1.9,
+        maxLife: 1.9,
+      });
+      this.spawnDust(this.player.x + this.player.w / 2, this.player.y, '#38bdf8', 18);
+      progressUnlocked = true;
+    }
+
+    if (progressUnlocked) {
+      this.persistProgress();
+      this.emitHud();
+      this.onProgressChange?.();
     }
 
     // Rising magma tide activates once you climb past 16m, slows down during horizontal wings
@@ -592,11 +982,149 @@ export class GameEngine {
         }
       }
     }
+
+    // Spike Crushers
+    for (const cr of this.world.crushers) {
+      if (Math.abs(cr.homeY - this.cameraY - VIRTUAL_H / 2) > VIRTUAL_H + 120) continue;
+
+      if (cr.state === 'idle') {
+        const beneath =
+          this.state === 'PLAYING' &&
+          Math.abs(playerCx - (cr.x + cr.w / 2)) <= cr.w * 0.5 + 18 &&
+          playerCy > cr.homeY &&
+          playerCy <= cr.homeY + cr.dropDist + 48;
+        if (beneath) {
+          cr.state = 'telegraph';
+          cr.timer = 0.36;
+          this.spawnDust(cr.x + cr.w / 2, cr.y + cr.h, '#fbbf24', 3);
+        }
+      } else if (cr.state === 'telegraph') {
+        cr.timer -= dt;
+        if (cr.timer <= 0) {
+          cr.state = 'dropping';
+        }
+      } else if (cr.state === 'dropping') {
+        cr.y += cr.dropSpeed * dt;
+        if (cr.y >= cr.homeY + cr.dropDist) {
+          cr.y = cr.homeY + cr.dropDist;
+          cr.state = 'paused';
+          cr.timer = 0.55;
+          if (Math.abs(cr.x - this.player.x) < VIRTUAL_W * 1.4 && Math.abs(cr.y - this.player.y) < VIRTUAL_H) {
+            retroAudio.crusherSlam();
+            this.shake(0.12, 2.2);
+          }
+          this.spawnDust(cr.x + cr.w / 2, cr.y + cr.h, '#94a3b8', 7);
+        }
+      } else if (cr.state === 'paused') {
+        cr.timer -= dt;
+        if (cr.timer <= 0) {
+          cr.state = 'rising';
+        }
+      } else if (cr.state === 'rising') {
+        cr.y -= 75 * dt;
+        if (cr.y <= cr.homeY) {
+          cr.y = cr.homeY;
+          cr.state = 'idle';
+        }
+      }
+    }
+
+    // Flame Jets
+    for (const fj of this.world.flameJets) {
+      const cyclePos = ((this.time + fj.offset) % fj.cycleDuration) / fj.cycleDuration;
+      const prevState = fj.state;
+      if (cyclePos < 0.45) {
+        fj.state = 'idle';
+      } else if (cyclePos < 0.70) {
+        fj.state = 'warning';
+      } else {
+        fj.state = 'firing';
+        if (
+          prevState !== 'firing' &&
+          Math.abs(fj.y - this.player.y) < VIRTUAL_H &&
+          Math.abs(fj.x - this.player.x) < VIRTUAL_W * 1.4
+        ) {
+          retroAudio.flameBurst();
+        }
+      }
+    }
+
+    // Shock Coils
+    for (const sc of this.world.shockCoils) {
+      const cyclePos = ((this.time + sc.offset) % sc.cycleDuration) / sc.cycleDuration;
+      const prevState = sc.state;
+      if (cyclePos < 0.48) {
+        sc.state = 'idle';
+      } else if (cyclePos < 0.72) {
+        sc.state = 'warning';
+      } else {
+        sc.state = 'firing';
+        if (
+          prevState !== 'firing' &&
+          Math.abs((sc.ay + sc.by) * 0.5 - this.player.y) < VIRTUAL_H &&
+          Math.abs((sc.ax + sc.bx) * 0.5 - this.player.x) < VIRTUAL_W * 1.4
+        ) {
+          retroAudio.electricZap();
+        }
+      }
+    }
+
+    // Acid Drips & Falling Globules
+    for (const ad of this.world.acidDrips) {
+      if (Math.abs(ad.y - this.cameraY - VIRTUAL_H / 2) > VIRTUAL_H + 80) continue;
+      ad.timer -= dt;
+      if (ad.timer <= 0) {
+        ad.timer = ad.interval;
+        this.world.acidDrops.push({
+          id: this.levelGen.uid(),
+          x: ad.x + 8,
+          y: ad.y + 15,
+          vy: 28,
+          life: 4.0,
+        });
+      }
+    }
+
+    const aliveDrops = [];
+    for (const drop of this.world.acidDrops) {
+      drop.vy = Math.min(260, drop.vy + 260 * dt);
+      drop.y += drop.vy * dt;
+      drop.life -= dt;
+      if (drop.life <= 0) continue;
+
+      let hitSolid = false;
+      for (const s of this.world.solids) {
+        if (drop.x >= s.x && drop.x <= s.x + s.w && drop.y >= s.y && drop.y <= s.y + s.h) {
+          hitSolid = true;
+          break;
+        }
+      }
+      if (hitSolid) {
+        this.spawnDust(drop.x, drop.y - 2, '#84cc16', 4);
+        if (
+          Math.abs(drop.x - this.player.x) < VIRTUAL_W * 1.2 &&
+          Math.abs(drop.y - this.player.y) < VIRTUAL_H
+        ) {
+          retroAudio.acidSplash();
+        }
+        continue;
+      }
+      aliveDrops.push(drop);
+    }
+    this.world.acidDrops = aliveDrops;
+
+    // Pendulum Maces
+    for (const pm of this.world.pendulums) {
+      pm.angle = Math.sin(this.time * pm.speed + pm.phase) * pm.maxAngle;
+      pm.bobX = pm.pivotX + Math.sin(pm.angle) * pm.length;
+      pm.bobY = pm.pivotY + Math.cos(pm.angle) * pm.length;
+    }
   }
 
   private updatePlayer(dt: number, input: InputState) {
     const p = this.player;
     p.animTimer += dt;
+    if (p.invulnTimer > 0) p.invulnTimer = Math.max(0, p.invulnTimer - dt);
     if (p.coyoteTimer > 0) p.coyoteTimer = Math.max(0, p.coyoteTimer - dt);
     if (p.wallCoyoteTimer > 0) p.wallCoyoteTimer = Math.max(0, p.wallCoyoteTimer - dt);
     if (p.jumpBufferTimer > 0) p.jumpBufferTimer = Math.max(0, p.jumpBufferTimer - dt);
@@ -742,6 +1270,7 @@ export class GameEngine {
       } else if (p.canBackflip) {
         p.canBackflip = false;
         p.isBackflipping = true;
+        this.didBackflipThisRun = true;
         p.backflipTimer = 0.34;
         p.backflipAngle = 0;
         p.vy = BACKFLIP_VY;
@@ -937,6 +1466,14 @@ export class GameEngine {
 
   private checkHazards() {
     const p = this.player;
+    if (p.invulnTimer > 0) {
+      // Safety rescue upward if falling off-screen during shield invulnerability
+      if (p.y > this.cameraY + VIRTUAL_H + 8) {
+        p.y = this.cameraY + VIRTUAL_H - 32;
+        p.vy = -220;
+      }
+      return;
+    }
     const hx = p.x + 2;
     const hy = p.y + 2;
     const hw = p.w - 4;
@@ -1022,7 +1559,85 @@ export class GameEngine {
       }
     }
 
-    // 7. Rising Magma / Abyss Fall
+    // 7. Spike Crushers
+    for (const cr of this.world.crushers) {
+      if (this.aabb(hx, hy, hw, hh, cr.x + 2, cr.y + 2, cr.w - 4, cr.h - 2)) {
+        this.killPlayer('Crushed by Spike Block');
+        return;
+      }
+    }
+
+    // 8. Flame Jets
+    for (const fj of this.world.flameJets) {
+      if (fj.state !== 'firing') continue;
+      const len = fj.reach * TILE;
+      let fx = fj.x;
+      let fy = fj.y;
+      let fw = TILE;
+      let fh = TILE;
+      if (fj.dir === 'right') {
+        fx = fj.x + TILE;
+        fy = fj.y + 3;
+        fw = len - 4;
+        fh = 10;
+      } else if (fj.dir === 'left') {
+        fx = fj.x - len + 4;
+        fy = fj.y + 3;
+        fw = len - 4;
+        fh = 10;
+      } else if (fj.dir === 'down') {
+        fx = fj.x + 3;
+        fy = fj.y + TILE;
+        fw = 10;
+        fh = len - 4;
+      } else {
+        fx = fj.x + 3;
+        fy = fj.y - len + 4;
+        fw = 10;
+        fh = len - 4;
+      }
+      if (this.aabb(hx, hy, hw, hh, fx, fy, fw, fh)) {
+        this.killPlayer('Scorched by Flame Jet');
+        return;
+      }
+    }
+
+    // 9. Shock Coils (active arc segment)
+    for (const sc of this.world.shockCoils) {
+      if (sc.state !== 'firing') continue;
+      const ax = sc.ax + 8;
+      const ay = sc.ay + 8;
+      const bx = sc.bx + 8;
+      const by = sc.by + 8;
+      const dx = bx - ax;
+      const dy = by - ay;
+      const lenSq = dx * dx + dy * dy;
+      const t = lenSq > 0 ? Math.max(0, Math.min(1, ((cx - ax) * dx + (cy - ay) * dy) / lenSq)) : 0;
+      const nearX = ax + t * dx;
+      const nearY = ay + t * dy;
+      if (Math.hypot(cx - nearX, cy - nearY) < 6.5) {
+        this.killPlayer('Electrocuted by Shock Coil');
+        return;
+      }
+    }
+
+    // 10. Acid Drips
+    for (const drop of this.world.acidDrops) {
+      if (Math.hypot(cx - drop.x, cy - drop.y) < 6.0) {
+        this.killPlayer('Dissolved by Acid Drip');
+        return;
+      }
+    }
+
+    // 11. Pendulum Maces
+    for (const pm of this.world.pendulums) {
+      if (Math.hypot(cx - pm.bobX, cy - pm.bobY) < pm.radius + 3.5) {
+        this.killPlayer('Smashed by Pendulum Mace');
+        return;
+      }
+    }
+
+    // 12. Rising Magma / Abyss Fall
     if (this.magmaActive && p.y + p.h > this.magmaY + 4) {
       this.killPlayer('Consumed by Rising Magma');
       return;
@@ -1041,14 +1656,9 @@ export class GameEngine {
     this.spawnDust(this.player.x + this.player.w / 2, this.player.y + this.player.h / 2, '#ef4444', 18);
     this.spawnDust(this.player.x + this.player.w / 2, this.player.y + this.player.h / 2, '#fbbf24', 10);
 
-    try {
-      localStorage.setItem(STORAGE_BEST_SCORE, String(this.bestScore));
-      localStorage.setItem(STORAGE_BEST_ALT, String(this.bestAltitudeMeters));
-    } catch {
-      // ignore
-    }
-
+    this.persistProgress();
     this.emitHud();
+    this.onProgressChange?.();
   }
 
   private addStylePoints(base: number, label: string, x: number, y: number, color: string) {
@@ -1145,11 +1755,14 @@ export class GameEngine {
 
   public emitHud() {
     const alt = this.getAltitudeMeters();
+    const activeBiome = this.getActiveBiomeId(alt);
+    const activeBiomeName = THEMES.find((t) => t.id === activeBiome)?.name || 'Obsidian Depths';
     const magmaDist = this.magmaActive
       ? Math.max(0, Math.round((this.magmaY - (this.player.y + this.player.h)) / TILE))
       : 99;
     this.onHudUpdate({
       gameState: this.state,
+      gameMode: this.gameMode,
       score: this.score,
       bestScore: this.bestScore,
       altitudeMeters: alt,
@@ -1157,8 +1770,14 @@ export class GameEngine {
       wingsCleared: this.wingsCleared,
       gemsCollected: this.gemsCollected,
       totalGems: this.totalGems,
+      revivedThisRun: this.revivedThisRun,
+      canRevive: this.state === 'GAME_OVER' && !this.revivedThisRun && this.totalGems >= REVIVE_COST_GEMS,
       selectedSkin: this.selectedSkin,
       unlockedSkins: this.unlockedSkins,
+      selectedTheme: this.selectedTheme,
+      unlockedThemes: this.unlockedThemes,
+      activeBiomeName,
+      secretUnlocked: this.secretUnlocked,
       comboCount: this.comboCount,
       deathReason: this.deathReason,
       canDoubleJump: this.player.canDoubleJump,
@@ -1171,16 +1790,19 @@ export class GameEngine {
 
   public render(ctx: CanvasRenderingContext2D) {
     const atlas = getSpriteAtlas();
+    const activeBiome = this.getActiveBiomeId();
+    const themeDef = THEMES.find((t) => t.id === activeBiome) || THEMES[1];
+    const themeBricks = getThemeBrickSprites(activeBiome);
     ctx.imageSmoothingEnabled = false;
 
-    // Deep obsidian pixel cavern background
-    ctx.fillStyle = '#0d111a';
+    // Biome-themed pixel cavern background (shifts every 100m on Spire Shift theme)
+    ctx.fillStyle = themeDef.bgColor;
     ctx.fillRect(0, 0, VIRTUAL_W, VIRTUAL_H);
 
     // Infinite 2D parallax pixel brick background grid
     const bgOffsetX = Math.floor(-this.cameraX * 0.35) % 32;
     const bgOffsetY = Math.floor(-this.cameraY * 0.35) % 32;
-    ctx.fillStyle = '#131926';
+    ctx.fillStyle = themeDef.parallaxColor;
     for (let y = bgOffsetY - 32; y < VIRTUAL_H + 32; y += 32) {
       for (let x = bgOffsetX - 32; x < VIRTUAL_W + 32; x += 32) {
         ctx.fillRect(x, y, 30, 14);
@@ -1198,11 +1820,29 @@ export class GameEngine {
       const meters = Math.round((this.startY - worldY) / TILE);
       if (meters > 0 && meters % 10 === 0) {
         const sy = Math.round(worldY - this.cameraY);
-        ctx.fillStyle = '#1b2434';
+        ctx.fillStyle = themeDef.lineColor;
         ctx.fillRect(0, sy, VIRTUAL_W, 1);
-        ctx.fillStyle = '#475569';
+        ctx.fillStyle = themeDef.labelColor;
         ctx.fillText(`${meters}M`, 20, sy - 3);
       }
+    }
+
+    // Online Race Rival Altitude Markers
+    if (this.gameMode === 'race' && this.raceRivals.length > 0) {
+      ctx.font = 'bold 7px monospace';
+      ctx.textAlign = 'right';
+      for (const rival of this.raceRivals) {
+        if (rival.altitudeMeters <= 0) continue;
+        const rivalWorldY = this.startY - rival.altitudeMeters * TILE;
+        const sy = Math.round(rivalWorldY - this.cameraY);
+        if (sy >= 12 && sy <= VIRTUAL_H - 12) {
+          ctx.fillStyle = 'rgba(16, 185, 129, 0.32)';
+          ctx.fillRect(16, sy, VIRTUAL_W - 32, 1);
+          ctx.fillStyle = '#34d399';
+          ctx.fillText(`${rival.displayName} ${rival.altitudeMeters}m`, VIRTUAL_W - 20, sy - 3);
+        }
+      }
+      ctx.textAlign = 'left';
     }
 
     ctx.save();
@@ -1223,14 +1863,14 @@ export class GameEngine {
       ctx.drawImage(atlas[`sign_${sign.dir}`], sign.x, sign.y);
     }
 
-    // 1. Solid tiles (16x16 tiled)
+    // 1. Solid tiles (16x16 tiled using active biome palette)
     for (const s of this.world.solids) {
       if (s.x + s.w < viewLeft || s.x > viewRight || s.y + s.h < viewTop || s.y > viewBottom) continue;
-      const sprite: SpriteName =
-        s.kind === 'wall' ? 'wall_brick' : s.kind === 'pillar' ? 'pillar_brick' : 'ledge_brick';
+      const brickCanvas =
+        s.kind === 'wall' ? themeBricks.wall : s.kind === 'pillar' ? themeBricks.pillar : themeBricks.ledge;
       for (let tx = s.x; tx < s.x + s.w; tx += TILE) {
         for (let ty = s.y; ty < s.y + s.h; ty += TILE) {
-          ctx.drawImage(atlas[sprite], tx, ty);
+          ctx.drawImage(brickCanvas, tx, ty);
         }
       }
     }
@@ -1392,6 +2032,150 @@ export class GameEngine {
       }
     }
 
+    // 7c. Spike Crushers + Overhead Chain
+    for (const cr of this.world.crushers) {
+      if (cr.x + cr.w < viewLeft || cr.x > viewRight || cr.y + cr.h < viewTop - 64 || cr.homeY > viewBottom + 64) {
+        continue;
+      }
+      // Track / chain connecting homeY to block
+      ctx.fillStyle = '#475569';
+      ctx.fillRect(Math.round(cr.x + cr.w / 2 - 1), Math.round(cr.homeY), 2, Math.max(2, Math.round(cr.y - cr.homeY)));
+      const jitterX = cr.state === 'telegraph' ? Math.round(Math.sin(this.time * 55) * 1.5) : 0;
+      const sprite: SpriteName = cr.state === 'telegraph' || cr.state === 'dropping' ? 'crusher_warn' : 'crusher_idle';
+      ctx.drawImage(atlas[sprite], Math.round(cr.x + jitterX), Math.round(cr.y));
+    }
+
+    // 7d. Flame Jets
+    const flameFrame: SpriteName = Math.floor(this.time * 16) % 2 === 0 ? 'flame_jet_0' : 'flame_jet_1';
+    for (const fj of this.world.flameJets) {
+      if (fj.x < viewLeft - 64 || fj.x > viewRight + 64 || fj.y < viewTop - 64 || fj.y > viewBottom + 64) {
+        continue;
+      }
+      ctx.drawImage(atlas[`flame_vent_${fj.dir}`], Math.round(fj.x), Math.round(fj.y));
+
+      if (fj.state === 'warning' && Math.floor(this.time * 20) % 2 === 0) {
+        ctx.fillStyle = '#fbbf24';
+        if (fj.dir === 'right') ctx.fillRect(fj.x + TILE, fj.y + 6, 4, 4);
+        else if (fj.dir === 'left') ctx.fillRect(fj.x - 4, fj.y + 6, 4, 4);
+        else if (fj.dir === 'down') ctx.fillRect(fj.x + 6, fj.y + TILE, 4, 4);
+        else ctx.fillRect(fj.x + 6, fj.y - 4, 4, 4);
+      } else if (fj.state === 'firing') {
+        const angle =
+          fj.dir === 'right' ? 0 : fj.dir === 'down' ? Math.PI / 2 : fj.dir === 'left' ? Math.PI : -Math.PI / 2;
+        const dx = fj.dir === 'right' ? 1 : fj.dir === 'left' ? -1 : 0;
+        const dy = fj.dir === 'down' ? 1 : fj.dir === 'up' ? -1 : 0;
+        for (let step = 1; step <= fj.reach; step++) {
+          const cx = Math.round(fj.x + dx * step * TILE + 8);
+          const cy = Math.round(fj.y + dy * step * TILE + 8);
+          ctx.save();
+          ctx.translate(cx, cy);
+          ctx.rotate(angle);
+          ctx.drawImage(atlas[flameFrame], -8, -8);
+          ctx.restore();
+        }
+      }
+    }
+
+    // 7e. Shock Coils + Jagged Lightning Arc
+    for (const sc of this.world.shockCoils) {
+      const minX = Math.min(sc.ax, sc.bx);
+      const maxX = Math.max(sc.ax, sc.bx) + TILE;
+      const minY = Math.min(sc.ay, sc.by);
+      const maxY = Math.max(sc.ay, sc.by) + TILE;
+      if (maxX < viewLeft || minX > viewRight || maxY < viewTop || minY > viewBottom) continue;
+
+      const coilSprite: SpriteName =
+        sc.state === 'firing' ? 'coil_fire' : sc.state === 'warning' ? 'coil_warn' : 'coil_idle';
+      ctx.drawImage(atlas[coilSprite], Math.round(sc.ax), Math.round(sc.ay));
+      ctx.drawImage(atlas[coilSprite], Math.round(sc.bx), Math.round(sc.by));
+
+      const x1 = sc.ax + 8;
+      const y1 = sc.ay + 6;
+      const x2 = sc.bx + 8;
+      const y2 = sc.by + 6;
+
+      if (sc.state === 'warning' && Math.floor(this.time * 22) % 2 === 0) {
+        ctx.strokeStyle = 'rgba(251, 191, 36, 0.85)';
+        ctx.lineWidth = 1;
+        ctx.setLineDash([3, 3]);
+        ctx.beginPath();
+        ctx.moveTo(x1, y1);
+        ctx.lineTo(x2, y2);
+        ctx.stroke();
+        ctx.setLineDash([]);
+      } else if (sc.state === 'firing') {
+        const segs = 10;
+        const dx = x2 - x1;
+        const dy = y2 - y1;
+        const dist = Math.max(1, Math.hypot(dx, dy));
+        const nx = -dy / dist;
+        const ny = dx / dist;
+
+        // Outer cyan arc glow
+        ctx.strokeStyle = '#38bdf8';
+        ctx.lineWidth = 3;
+        ctx.beginPath();
+        ctx.moveTo(x1, y1);
+        for (let i = 1; i < segs; i++) {
+          const t = i / segs;
+          const jitter = Math.sin(this.time * 58 + i * 2.7 + sc.id) * 4.2;
+          ctx.lineTo(Math.round(x1 + dx * t + nx * jitter), Math.round(y1 + dy * t + ny * jitter));
+        }
+        ctx.lineTo(x2, y2);
+        ctx.stroke();
+
+        // Inner white-hot core
+        ctx.strokeStyle = '#e0f2fe';
+        ctx.lineWidth = 1.25;
+        ctx.beginPath();
+        ctx.moveTo(x1, y1);
+        for (let i = 1; i < segs; i++) {
+          const t = i / segs;
+          const jitter = Math.sin(this.time * 58 + i * 2.7 + sc.id) * 3.5;
+          ctx.lineTo(Math.round(x1 + dx * t + nx * jitter), Math.round(y1 + dy * t + ny * jitter));
+        }
+        ctx.lineTo(x2, y2);
+        ctx.stroke();
+      }
+    }
+
+    // 7f. Acid Drips & Falling Globules
+    for (const ad of this.world.acidDrips) {
+      if (ad.x + TILE < viewLeft || ad.x > viewRight || ad.y + TILE < viewTop || ad.y > viewBottom) continue;
+      const sprite: SpriteName = ad.timer < 0.4 ? 'acid_vent_drip' : 'acid_vent_idle';
+      ctx.drawImage(atlas[sprite], Math.round(ad.x), Math.round(ad.y));
+    }
+
+    for (const drop of this.world.acidDrops) {
+      if (drop.x < viewLeft - 8 || drop.x > viewRight + 8 || drop.y < viewTop - 8 || drop.y > viewBottom + 8) {
+        continue;
+      }
+      ctx.drawImage(atlas.acid_drop, Math.round(drop.x - 8), Math.round(drop.y - 8));
+    }
+
+    // 7g. Pendulum Maces
+    for (const pm of this.world.pendulums) {
+      if (
+        pm.pivotX < viewLeft - pm.length - 16 ||
+        pm.pivotX > viewRight + pm.length + 16 ||
+        pm.pivotY < viewTop - pm.length - 16 ||
+        pm.pivotY > viewBottom + pm.length + 16
+      ) {
+        continue;
+      }
+      // Pixel chain links from pivot to mace
+      const steps = Math.max(4, Math.floor(pm.length / 4));
+      for (let i = 1; i < steps; i++) {
+        const t = i / steps;
+        const lx = Math.round(pm.pivotX + (pm.bobX - pm.pivotX) * t);
+        const ly = Math.round(pm.pivotY + (pm.bobY - pm.pivotY) * t);
+        ctx.fillStyle = i % 2 === 0 ? '#94a3b8' : '#475569';
+        ctx.fillRect(lx - 1, ly - 1, 2, 2);
+      }
+      ctx.drawImage(atlas.pendulum_pivot, Math.round(pm.pivotX - 8), Math.round(pm.pivotY - 8));
+      ctx.drawImage(atlas.pendulum_mace, Math.round(pm.bobX - 8), Math.round(pm.bobY - 8));
+    }
+
     // 8. Grapple Rings + Active Targeting Reticle
     for (const r of this.world.rings) {
       if (r.x < viewLeft || r.x > viewRight || r.y < viewTop || r.y > viewBottom) continue;
@@ -1469,6 +2253,9 @@ export class GameEngine {
 
       const skinCanvas = getSkinSprite(this.selectedSkin, pose);
       ctx.save();
+      if (p.invulnTimer > 0 && Math.floor(this.time * 18) % 2 === 0) {
+        ctx.globalAlpha = 0.45;
+      }
       ctx.translate(Math.round(p.x + p.w / 2), Math.round(p.y + p.h - 8));
       if (p.isBackflipping) {
         ctx.rotate(p.backflipAngle);
